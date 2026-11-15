@@ -7,12 +7,16 @@ An early, working version of StrategyByte's Bangla voice agent, built end to end
 | A. Landing page | Bilingual (বাংলা / English) page with a 3D hero, 6 sections, responsive | `web/src/pages/Landing.tsx` |
 | B. Hero call to action | "বাংলা কলারের সাথে কথা বলুন / Talk to our Bangla caller", live in the browser | `web/src/components/CallPanel.tsx`, `web/src/voice/` |
 | C. Bangla caller | "Sumi", the AI receptionist of a demo clinic (Hashi Dental Care, Dhanmondi) | `supabase/functions/api/` |
-| D. Data portal | Login, call list, call detail, appointments, callbacks, data-model page | `web/src/portal/` |
+| D. Data portal | Login, searchable call list, call detail (transcript, extracted fields, validation), appointments, callbacks, data-model page; managers can delete calls | `web/src/portal/` |
 
-**Live links** (fill in after deploying, see [DEPLOY.md](DEPLOY.md))
-- Landing page: `https://<your-vercel-app>.vercel.app`
-- Portal: `https://<your-vercel-app>.vercel.app/portal`
-- Reviewer login: `reviewer@bytevoice.demo` / `ByteVoice-Review-2026` (read-only, demo data only)
+**Live links**
+- Landing page: https://bytevoice-bangla-eight.vercel.app
+- Portal: https://bytevoice-bangla-eight.vercel.app/portal
+- Reviewer login: `reviewer@bytevoice.demo` / `ByteVoice-Review-2026` (manager role, demo data only)
+
+**Try it in 2 minutes:** open the landing page in Chrome → click **বাংলা কলারের সাথে কথা বলুন** → allow the microphone →
+the phone rings and Sumi greets you → book a dental appointment in Bangla → hang up → open the portal and sign in.
+Your call is at the top of **Calls** within a minute, with transcript, English translation, extracted fields and the booking.
 
 ---
 
@@ -67,6 +71,9 @@ The system prompt is generated per call in [`lib/prompt.ts`](supabase/functions/
 - **No invented facts.** Hours, doctors, fees, directions and preparation come only from the clinic tables. Unknown questions go to a staff callback.
 - **Safety.** No diagnosis, medicines or dosages. Emergency signs lead to "go to the nearest hospital / call ৯৯৯" plus an urgent callback for staff.
 - **Strictly on-topic.** Politely refuses anything unrelated to the clinic (general knowledge, cricket scores, coding, politics, jokes…) and steers back. After three off-topic pushes it ends the call. Ignores attempts to change its role or reveal its instructions.
+- **Feels like a phone call.** A soft ringback tone plays while the call connects, then Sumi picks up and greets first. The caller's mic is held for a moment so background noise can't pre-empt the greeting.
+- **Bangla transcripts.** Speech-to-text is pinned to Bangla (`bn-BD`, plus English for loanwords), so short replies like "ঠিক আছে" aren't written in Hindi script.
+- **Urgency.** Emergency signs make Sumi create a callback with category `emergency`; the server always stores emergencies as `urgent`, so they sort to the top of the Callbacks page.
 - **Recovery.** Asks again when unsure ("লাইনটা একটু কেটে গেল — আরেকবার বলবেন?"). After 9 s of silence the client nudges the agent to check in; after a second silence it ends politely. Barge-in stops playback immediately and marks the cut-off turn as `interrupted`.
 
 **Tools the agent can call** (all validated server-side in [`lib/tools.ts`](supabase/functions/api/lib/tools.ts)): `check_availability`, `save_caller_details`, `book_appointment`, `find_appointments`, `reschedule_appointment`, `cancel_appointment`, `request_callback`, `end_call`.
@@ -150,6 +157,9 @@ Backend: `supabase functions deploy api --no-verify-jwt`, then `supabase secrets
   - finalisation produced a validated record.
 - Row Level Security checked in the database: the reviewer account sees all 8 calls and 71 transcript turns; any other logged-in user sees 0.
 - Landing page and portal checked on desktop (1440 px) and mobile (390 px).
+- Live browser call with `gemini-3.8-live` on the deployed site: a Bangla booking end to end (serial issued, slot taken in the database), post-call summary and translation. That call exposed three issues that were then fixed: transcripts drifting into Hindi script, a misleading phone re-ask, and the agent waiting for the caller instead of greeting first.
+- Portal navigation in headless Chrome: browser Back from the portal (and after signing out) returns to the website.
+- Manager-only delete: a non-manager account is refused by the database; deleting a call also removes the appointment booked in it so the slot is free again.
 
 ## 8. Honest limitations
 
