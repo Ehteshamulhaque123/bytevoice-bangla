@@ -123,6 +123,20 @@ type Args = Record<string, unknown>;
 type ToolResult = Record<string, unknown>;
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 
+
+function phoneProblem(problem: string | null, heard: string) {
+  const say = problem === "too_long"
+    ? "দুঃখিত, নম্বরে একটা ডিজিট বেশি চলে এসেছে মনে হচ্ছে। নম্বরটা আরেকবার ধীরে ধীরে বলবেন?"
+    : problem === "too_short"
+    ? "নম্বরটা মনে হয় পুরো আসেনি — ০১ দিয়ে শুরু ১১ ডিজিটের নম্বরটা আরেকবার বলবেন?"
+    : "এটা মনে হয় বাংলাদেশের মোবাইল নম্বর না — ০১ দিয়ে শুরু ১১ ডিজিটের নম্বরটা আরেকবার বলবেন?";
+  return {
+    ok: false, error: "invalid_phone", problem, heard_digits: heard, digit_count: heard.length,
+    note: "You sent " + heard.length + " digits; a BD mobile has exactly 11. If the caller already confirmed a correct 11-digit number and you mistyped it, call this tool again at once with exactly those 11 digits and do NOT ask the caller. Only if you are unsure, ask them to repeat it using 'say'.",
+    say,
+  };
+}
+
 // ───────────────────────── Handlers ─────────────────────────
 
 async function checkAvailability(ctx: ClinicContext, a: Args): Promise<ToolResult> {
@@ -207,8 +221,7 @@ async function saveCallerDetails(ctx: ClinicContext, callId: string, a: Args): P
   await upsertExtraction(callId, Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== null)));
 
   if (str(a.phone) && !phone.valid) {
-    return { ok: false, error: "invalid_phone", problem: phone.problem, heard_digits: phone.digits,
-      say: "নম্বরটা মনে হয় পুরো আসেনি — ০১ দিয়ে শুরু ১১ ডিজিটের নম্বরটা আরেকবার বলবেন?" };
+    return phoneProblem(phone.problem, phone.digits);
   }
   if (nameBn && phone.valid) {
     const pid = await upsertPatient(ctx, nameBn, nameEn, phone.e164!);
@@ -243,8 +256,7 @@ async function bookAppointment(ctx: ClinicContext, callId: string, a: Args): Pro
   if (!nameBn) return { ok: false, error: "missing_name", say: "আপনার পুরো নামটা একটু বলবেন?" };
   const phone = normalizeBdPhone(str(a.phone));
   if (!phone.valid) {
-    return { ok: false, error: "invalid_phone", problem: phone.problem, heard_digits: phone.digits,
-      say: "মোবাইল নম্বরটা ঠিকমতো পাইনি — ০১ দিয়ে শুরু ১১ ডিজিটের নম্বরটা আরেকবার বলবেন?" };
+    return phoneProblem(phone.problem, phone.digits);
   }
   const date = normalizeDate(str(a.date));
   const time = normalizeTime(str(a.time));

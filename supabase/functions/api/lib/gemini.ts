@@ -17,8 +17,10 @@ export function liveConfig(systemInstruction: string, tools: unknown[]) {
     speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: env.voiceName } } },
     systemInstruction,
     tools,
-    inputAudioTranscription: {},
-    outputAudioTranscription: {},
+    // Pin transcription to Bangla (+ English loanwords). Without this, auto-detect sometimes
+    // writes short Bangla replies like "ঠিক আছে" in Hindi/Devanagari.
+    inputAudioTranscription: { languageCodes: ["bn-BD", "en-US"] },
+    outputAudioTranscription: { languageCodes: ["bn-BD"] },
     realtimeInputConfig: {
       automaticActivityDetection: {
         disabled: false,
