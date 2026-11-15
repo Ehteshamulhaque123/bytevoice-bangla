@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+/* ByteVoice Bangla — design tokens
+   Palette drawn from Bangladesh itself: shapla (water lily) pink, pond-water teal,
+   turmeric, and a cool sage "paper" instead of the usual cream. One family (Anek Bangla)
+   covers Bangla and Latin; its width axis does the typographic work. */
+@theme {
+  --color-paper: #eef2ec;
+  --color-mist: #d7e2db;
+  --color-ink: #12302f;
+  --color-ink-soft: #3d5a58;
+  --color-pond: #1d6b63;
+  --color-pond-deep: #0f4a45;
+  --color-shapla: #d94f7a;
+  --color-shapla-soft: #f6d3de;
+  --color-turmeric: #e9a93b;
+  --color-ok: #2f7d4f;
+  --color-warn: #b7791f;
+  --color-bad: #b4413c;
+
+  --font-sans: "Anek Bangla Variable", "Noto Sans Bengali", system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+  font-family: var(--font-sans);
+  font-variation-settings: "wdth" 100;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body { margin: 0; min-height: 100vh; }
+
+/* Display type: the width axis stretched wide — the page's typographic signature. */
+.display {
+  font-variation-settings: "wdth" 125;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.08;
+}
+.condensed { font-variation-settings: "wdth" 80; }
+
+/* Bangla has tall conjuncts and matras: give body text a little more leading than Latin. */
+.prose-bn { line-height: 1.7; }
+
+:focus-visible {
+  outline: 3px solid var(--color-turmeric);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* Live-call pulse on the hero button and the status dot. */
+@keyframes ring {
+  0% { box-shadow: 0 0 0 0 rgba(246, 211, 222, 0.45); }
+  100% { box-shadow: 0 0 0 18px rgba(246, 211, 222, 0); }
+}
+.ring-pulse { animation: ring 1.6s ease-out infinite; }
+
+@keyframes blink { 50% { opacity: 0.25; } }
+.blink { animation: blink 1.2s ease-in-out infinite; }
+
+/* Scrollbar for transcript panes */
+.thin-scroll { scrollbar-width: thin; scrollbar-color: var(--color-mist) transparent; }
+
+/* Soft vignette so the 3D pond dissolves into the hero instead of sitting in a box. */
+.pond-mask {
+  -webkit-mask-image: radial-gradient(ellipse 50% 50% at 50% 48%, #000 62%, transparent 100%);
+  mask-image: radial-gradient(ellipse 50% 50% at 50% 48%, #000 62%, transparent 100%);
+}
