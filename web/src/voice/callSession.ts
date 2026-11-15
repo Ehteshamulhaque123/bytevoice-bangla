@@ -59,6 +59,9 @@ export class CallSession {
   private hangupAfterSpeech = false;
   private ended = false;
   private setupDone = false;
+  private greetSent = false;
+  private agentHasSpoken = false;
+  private micOpenAt = 0; // until then, hold mic audio so the agent can greet first
 
   subscribe(fn: Listener) {
     this.listeners.add(fn);
@@ -165,13 +168,31 @@ export class CallSession {
       return;
     }
 
-    // 4. Mic streaming begins now; the agent greets as soon as setup completes.
+    this.maybeGreet();
+
+    // 4. Mic streaming begins now. Audio is held back for a moment so the agent greets first:
+    // background noise would otherwise count as the caller speaking and the model would wait.
     this.mic = new MicCapture(stream, (b64) => {
-      if (this.setupDone && !this.ended) {
+      if (this.setupDone && !this.ended && (this.agentHasSpoken || Date.now() >= this.micOpenAt)) {
         this.session?.sendRealtimeInput({ audio: { data: b64, mimeType: "audio/pcm;rate=16000" } });
       }
     });
     await this.mic.start();
+  }
+
+  /** Ask the agent to open the call. Runs once both the socket is ready and setup is complete. */
+  private maybeGreet() {
+    if (this.greetSent || !this.setupDone || !this.session || this.ended) return;
+    this.greetSent = true;
+    this.micOpenAt = Date.now() + 4000;
+    this.session.sendRealtimeInput({ text: "[call connected]" });
+    // Fallback: if no greeting audio within 2.5 s, send it as a completed turn instead.
+    window.setTimeout(() => {
+      if (this.agentHasSpoken || this.ended || !this.session) return;
+      try {
+        this.session.sendClientContent({ turns: [{ role: "user", parts: [{ text: "[call connected]" }] }], turnComplete: true });
+      } catch (e) { console.warn("greet fallback failed", e); }
+    }, 2500);
   }
 
   private onMessage(m: LiveServerMessage) {
@@ -180,7 +201,7 @@ export class CallSession {
       this.startedAt = Date.now();
       this.set({ phase: "live" });
       this.reportState("connected");
-      this.session?.sendRealtimeInput({ text: "[call connected]" });
+      this.maybeGreet();
       this.startTimers();
       return;
     }
@@ -197,6 +218,7 @@ export class CallSession {
       for (const part of sc.modelTurn?.parts ?? []) {
         const data = part.inlineData?.data;
         if (data) {
+          this.agentHasSpoken = true;
           this.player?.play(data, 24000);
           if (!this.state.agentSpeaking) this.set({ agentSpeaking: true, callerSpeaking: false });
         }

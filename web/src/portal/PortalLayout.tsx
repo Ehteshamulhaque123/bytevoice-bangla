@@ -23,6 +23,9 @@ function Login() {
   return (
     <main className="grid min-h-screen place-items-center bg-ink px-5 text-paper">
       <div className="w-full max-w-sm">
+        <Link to="/" className="mb-8 inline-flex items-center gap-1.5 text-sm text-paper/70 hover:text-paper">
+          <span aria-hidden="true">←</span> Back to website
+        </Link>
         <Link to="/" className="flex items-center gap-2">
           <img src="/favicon.svg" alt="" className="h-9 w-9" />
           <span className="text-lg font-bold">ByteVoice <span className="text-shapla">বাংলা</span></span>
@@ -66,6 +69,18 @@ export default function PortalLayout() {
   const [staffName, setStaffName] = useState<string>("");
   const [notStaff, setNotStaff] = useState(false);
   const navigate = useNavigate();
+
+  // If the portal was opened directly (link, bookmark, typed URL) there is no site page behind it,
+  // so the browser's Back button would leave the site. Slip the homepage in underneath, once,
+  // so Back always lands on the website.
+  useEffect(() => {
+    const st = window.history.state as { idx?: number } | null;
+    if ((st?.idx ?? 0) === 0) {
+      const here = window.location.pathname + window.location.search + window.location.hash;
+      window.history.replaceState({ usr: null, key: "home", idx: 0 }, "", "/");
+      window.history.pushState({ usr: null, key: "portal", idx: 1 }, "", here);
+    }
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));

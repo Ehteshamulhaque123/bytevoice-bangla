@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, supabase } from "../lib/api";
 import { StatusBadge } from "./CallsPage";
 import { fmtDateTime, fmtDuration, fmtOffset, fmtPhone, fmtTime, INTENT } from "./format";
@@ -57,6 +57,17 @@ export default function CallDetailPage() {
   const [services, setServices] = useState<Record<string, string>>({});
   const [view, setView] = useState<"both" | "bn" | "en">("both");
   const [rerun, setRerun] = useState<"idle" | "busy" | "done" | "error">("idle");
+  const [isManager, setIsManager] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      if (!data.user) return;
+      supabase.from("staff").select("role").eq("user_id", data.user.id).maybeSingle()
+        .then(({ data: s }) => setIsManager(s?.role === "manager" || s?.role === "admin"));
+    });
+  }, []);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -92,6 +103,19 @@ export default function CallDetailPage() {
     if (!id) return;
     setRerun("busy");
     try { await api.refinalize(id); await load(); setRerun("done"); } catch { setRerun("error"); }
+  }
+
+  async function doDelete() {
+    if (!id) return;
+    const ok = window.confirm(
+      "Delete this call permanently?\n\nThis removes the call, its transcript, extracted fields and any appointment booked during it (the slot becomes free again). This can't be undone.",
+    );
+    if (!ok) return;
+    setDeleting(true);
+    const { error } = await supabase.rpc("delete_call", { p_call: id });
+    setDeleting(false);
+    if (error) { window.alert("Couldn't delete the call: " + error.message); return; }
+    navigate("/portal");
   }
 
   if (call === undefined) return <p className="text-ink-soft">Loading call…</p>;
@@ -138,6 +162,13 @@ export default function CallDetailPage() {
             title="Run extraction and validation again from the stored transcript">
             {rerun === "busy" ? "Re-running…" : rerun === "done" ? "Updated" : rerun === "error" ? "Failed, retry" : "Re-run extraction"}
           </button>
+          {isManager && (
+            <button onClick={doDelete} disabled={deleting}
+              className="rounded-full border border-bad/30 bg-white px-3.5 py-1.5 text-sm text-bad hover:bg-bad/10 disabled:opacity-60"
+              title="Managers only: permanently delete this call and anything booked during it">
+              {deleting ? "Deleting…" : "Delete call"}
+            </button>
+          )}
         </div>
       </div>
 
