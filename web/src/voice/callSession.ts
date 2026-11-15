@@ -62,6 +62,7 @@ export class CallSession {
   private greetSent = false;
   private agentHasSpoken = false;
   private micOpenAt = 0; // until then, hold mic audio so the agent can greet first
+  private ringStartedAt = 0;
 
   subscribe(fn: Listener) {
     this.listeners.add(fn);
@@ -81,7 +82,7 @@ export class CallSession {
 
   async start() {
     if (this.state.phase !== "idle" && this.state.phase !== "saved" && this.state.phase !== "error") return;
-    Object.assign(this, { seq: 0, ended: false, setupDone: false, silenceNudges: 0, hangupAfterSpeech: false });
+    Object.assign(this, { seq: 0, ended: false, setupDone: false, silenceNudges: 0, hangupAfterSpeech: false, greetSent: false, agentHasSpoken: false, micOpenAt: 0 });
     this.dirty.clear();
     this.set({ phase: "mic", turns: [], error: null, finalStatus: null, callId: null, elapsedS: 0, muted: false, activity: null });
 
@@ -106,6 +107,9 @@ export class CallSession {
     // Create the player inside the click's user-gesture window so audio can autoplay.
     this.player = new PcmPlayer();
     await this.player.resume();
+    // Ring while we connect, like a real phone call; stops when Sumi picks up.
+    this.player.startRing();
+    this.ringStartedAt = Date.now();
     this.player.onDrained = () => {
       this.set({ agentSpeaking: false });
       this.lastActivity = Date.now();
@@ -184,15 +188,20 @@ export class CallSession {
   private maybeGreet() {
     if (this.greetSent || !this.setupDone || !this.session || this.ended) return;
     this.greetSent = true;
-    this.micOpenAt = Date.now() + 4000;
-    this.session.sendRealtimeInput({ text: "[call connected]" });
+    // Let the phone ring at least once (about 2 s) before Sumi "picks up".
+    const wait = Math.max(0, this.ringStartedAt + 2000 - Date.now());
+    this.micOpenAt = Date.now() + wait + 4000;
+    window.setTimeout(() => {
+      if (this.ended || !this.session) return;
+      this.session.sendRealtimeInput({ text: "[call connected]" });
+    }, wait);
     // Fallback: if no greeting audio within 2.5 s, send it as a completed turn instead.
     window.setTimeout(() => {
       if (this.agentHasSpoken || this.ended || !this.session) return;
       try {
         this.session.sendClientContent({ turns: [{ role: "user", parts: [{ text: "[call connected]" }] }], turnComplete: true });
       } catch (e) { console.warn("greet fallback failed", e); }
-    }, 2500);
+    }, wait + 2500);
   }
 
   private onMessage(m: LiveServerMessage) {
@@ -218,6 +227,7 @@ export class CallSession {
       for (const part of sc.modelTurn?.parts ?? []) {
         const data = part.inlineData?.data;
         if (data) {
+          if (!this.agentHasSpoken) this.player?.stopRing();
           this.agentHasSpoken = true;
           this.player?.play(data, 24000);
           if (!this.state.agentSpeaking) this.set({ agentSpeaking: true, callerSpeaking: false });
@@ -357,6 +367,7 @@ export class CallSession {
     this.session = null;
     this.mic?.stop();
     this.mic = null;
+    this.player?.stopRing();
     // Let a goodbye that is still playing finish naturally, unless the caller hung up.
     if (reason === "caller_hangup" || reason === "error") this.player?.close();
     else window.setTimeout(() => this.player?.close(), 4000);
@@ -379,6 +390,7 @@ export class CallSession {
   }
 
   private fail(error: CallErrorCode) {
+    this.player?.stopRing();
     this.player?.close();
     this.player = null;
     this.set({ phase: "error", error, agentSpeaking: false, callerSpeaking: false });

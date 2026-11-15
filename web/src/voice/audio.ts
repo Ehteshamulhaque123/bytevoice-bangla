@@ -122,6 +122,48 @@ export class PcmPlayer {
     if (this.ctx.state === "suspended") await this.ctx.resume();
   }
 
+  // ── Ringback tone while the call connects ("ring-ring … ring-ring") ──
+  private ring: { oscs: OscillatorNode[]; gain: GainNode; timer: number } | null = null;
+
+  /** Start a soft telephone ringback: two 0.4 s bursts, then a pause, repeating every 3 s. */
+  startRing() {
+    if (this.ring) return;
+    const gain = this.ctx.createGain();
+    gain.gain.value = 0;
+    gain.connect(this.ctx.destination);
+    const oscs = [400, 450].map((f) => {
+      const o = this.ctx.createOscillator();
+      o.frequency.value = f;
+      o.connect(gain);
+      o.start();
+      return o;
+    });
+    const schedule = () => {
+      const t = this.ctx.currentTime + 0.05;
+      const g = gain.gain;
+      for (const start of [t, t + 0.6]) {
+        g.setValueAtTime(0, start);
+        g.linearRampToValueAtTime(0.08, start + 0.02);
+        g.setValueAtTime(0.08, start + 0.38);
+        g.linearRampToValueAtTime(0, start + 0.4);
+      }
+    };
+    schedule();
+    this.ring = { oscs, gain, timer: window.setInterval(schedule, 3000) };
+  }
+
+  stopRing() {
+    if (!this.ring) return;
+    const { oscs, gain, timer } = this.ring;
+    this.ring = null;
+    window.clearInterval(timer);
+    const now = this.ctx.currentTime;
+    gain.gain.cancelScheduledValues(now);
+    gain.gain.setValueAtTime(gain.gain.value, now);
+    gain.gain.linearRampToValueAtTime(0, now + 0.05);
+    oscs.forEach((o) => { try { o.stop(now + 0.06); } catch { /* already stopped */ } });
+  }
+
   /** Queue one base64 PCM16 chunk at the given sample rate. */
   play(b64: string, rate = 24000) {
     const pcm = base64ToInt16(b64);

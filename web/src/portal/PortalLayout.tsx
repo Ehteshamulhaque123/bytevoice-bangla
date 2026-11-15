@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate, useNavigationType } from "react-router-dom";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/api";
 
@@ -69,6 +69,17 @@ export default function PortalLayout() {
   const [staffName, setStaffName] = useState<string>("");
   const [notStaff, setNotStaff] = useState(false);
   const navigate = useNavigate();
+  const navType = useNavigationType();
+
+  // After signing out, Back must not walk through old portal pages (they'd only show the login):
+  // send it to the homepage. Opening the portal on purpose (a link click) still shows the login.
+  useEffect(() => {
+    if (session) { try { sessionStorage.removeItem("bv_signed_out"); } catch { /* ignore */ } return; }
+    if (navType === "PUSH") { try { sessionStorage.removeItem("bv_signed_out"); } catch { /* ignore */ } return; }
+    let signedOut = false;
+    try { signedOut = sessionStorage.getItem("bv_signed_out") === "1"; } catch { /* ignore */ }
+    if (session === null && navType === "POP" && signedOut) navigate("/", { replace: true });
+  }, [session, navType, navigate]);
 
   // If the portal was opened directly (link, bookmark, typed URL) there is no site page behind it,
   // so the browser's Back button would leave the site. Slip the homepage in underneath, once,
@@ -99,7 +110,11 @@ export default function PortalLayout() {
   if (session === undefined) return <div className="min-h-screen bg-paper" />;
   if (!session) return <Login />;
 
-  const signOut = async () => { await supabase.auth.signOut(); navigate("/portal"); };
+  const signOut = async () => {
+    try { sessionStorage.setItem("bv_signed_out", "1"); } catch { /* ignore */ }
+    await supabase.auth.signOut();
+    navigate("/", { replace: true });
+  };
 
   return (
     <div className="min-h-screen bg-paper">
